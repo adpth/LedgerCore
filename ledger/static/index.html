@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#f5f6f2">
+<title>LedgerCore | Finance console</title>
+<link rel="stylesheet" href="/assets/style.css">
+<script src="/assets/app.js" defer></script>
+</head>
+<body>
+<div class="shell">
+<aside class="rail">
+  <a class="brand" href="#overview"><span class="mark" aria-hidden="true">▥</span> LedgerCore</a>
+  <nav aria-label="Ledger" hidden><a href="#overview"><span aria-hidden="true">◫</span>Overview</a><a href="#journal"><span aria-hidden="true">☷</span>Journal</a><a href="#accounts"><span aria-hidden="true">▤</span>Accounts</a><a href="#reconciliation"><span aria-hidden="true">✓</span>Reconciliation</a></nav>
+  <div class="rail-foot"><span>Finance console</span><button id="disconnect" hidden>Sign out</button><span id="session-status" role="status"></span></div>
+</aside>
+<main>
+  <header class="top"><span>Workspace <b>/</b> <strong id="breadcrumb">Sign in</strong></span><span class="connection" id="connection">Signed out</span></header>
+  <section id="view" aria-live="polite"><p>Loading finance console…</p></section>
+</main>
+</div>
+<template id="login">
+  <div class="intro"><h1>Finance console</h1><p id="sign-in-description"></p></div>
+  <section class="panel login" aria-label="Sign in">
+    <button type="button" class="primary" id="sign-in">Sign in with SSO</button>
+    <p id="sign-in-feedback" class="error" role="status"></p>
+  </section>
+</template>
+<noscript>Enable JavaScript to use the finance console.</noscript>
+</body>
+</html>

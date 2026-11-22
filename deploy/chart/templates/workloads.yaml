@@ -1,0 +1,150 @@
+{{- $name := .Release.Name }}
+{{- $image := required "image is required" .Values.image }}
+{{- range $role := list "api" "relay" "payout" }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $name }}-{{ $role }}
+spec:
+  replicas: {{ if eq $role "api" }}{{ $.Values.replicas }}{{ else }}1{{ end }}
+  selector:
+    matchLabels: {app: {{ $name }}-{{ $role }}}
+  template:
+    metadata:
+      labels: {app: {{ $name }}-{{ $role }}}
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile: {type: RuntimeDefault}
+      {{- if $.Values.databaseCaConfigMap }}
+      volumes:
+        - name: database-ca
+          configMap: {name: {{ $.Values.databaseCaConfigMap | quote }}}
+      {{- end }}
+      containers:
+        - name: {{ $role }}
+          image: {{ $image | quote }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: {drop: ["ALL"]}
+            readOnlyRootFilesystem: true
+          {{- if $.Values.databaseCaConfigMap }}
+          volumeMounts:
+            - {name: database-ca, mountPath: /etc/ledgercore/tls, readOnly: true}
+          {{- end }}
+          envFrom:
+            - secretRef:
+                name: {{ $.Values.existingSecret }}
+          {{- if $.Values.otlpEndpoint }}
+          env:
+            - {name: OTEL_EXPORTER_OTLP_ENDPOINT, value: {{ $.Values.otlpEndpoint | quote }}}
+            - {name: OTEL_SERVICE_NAME, value: {{ printf "ledgercore-%s" $role | quote }}}
+            - {name: OTEL_SEMCONV_STABILITY_OPT_IN, value: "http"}
+            - {name: OTEL_PYTHON_FASTAPI_EXCLUDED_URLS, value: "/console/callback"}
+            - {name: OTEL_LOGS_EXPORTER, value: "none"}
+          {{- end }}
+          {{- if eq $role "api" }}
+          command: [{{ if $.Values.otlpEndpoint }}"opentelemetry-instrument", {{ end }}"uvicorn", "ledger.api:app", "--host", "0.0.0.0", "--no-access-log"]
+          ports: [{containerPort: 8000}]
+          livenessProbe:
+            httpGet: {path: /health/live, port: 8000}
+          readinessProbe:
+            httpGet: {path: /health/ready, port: 8000}
+            timeoutSeconds: 3
+          {{- else }}
+          command: [{{ if $.Values.otlpEndpoint }}"opentelemetry-instrument", {{ end }}"python", "-m", "ledger.worker", {{ $role | quote }}]
+          {{- end }}
+{{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}-api
+spec:
+  selector: {app: {{ $name }}-api}
+  ports: [{port: 80, targetPort: 8000}]
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ $name }}-migrate
+  annotations:
+    helm.sh/hook: pre-install,pre-upgrade
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: 2
+  template:
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile: {type: RuntimeDefault}
+      restartPolicy: Never
+      {{- if .Values.databaseCaConfigMap }}
+      volumes:
+        - name: database-ca
+          configMap: {name: {{ .Values.databaseCaConfigMap | quote }}}
+      {{- end }}
+      containers:
+        - name: migrate
+          image: {{ $image | quote }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: {drop: ["ALL"]}
+            readOnlyRootFilesystem: true
+          command: ["python", "-m", "ledger.bootstrap"]
+          {{- if .Values.databaseCaConfigMap }}
+          volumeMounts:
+            - {name: database-ca, mountPath: /etc/ledgercore/tls, readOnly: true}
+          {{- end }}
+          envFrom:
+            - secretRef:
+                name: {{ .Values.migrationSecret }}
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ $name }}-reconcile
+spec:
+  schedule: "0 3 * * *"
+  timeZone: "Etc/UTC"
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      backoffLimit: 0
+      template:
+        spec:
+          automountServiceAccountToken: false
+          securityContext:
+            runAsNonRoot: true
+            seccompProfile: {type: RuntimeDefault}
+          restartPolicy: Never
+          {{- if .Values.databaseCaConfigMap }}
+          volumes:
+            - name: database-ca
+              configMap: {name: {{ .Values.databaseCaConfigMap | quote }}}
+          {{- end }}
+          containers:
+            - name: reconcile
+              image: {{ $image | quote }}
+              securityContext:
+                allowPrivilegeEscalation: false
+                capabilities: {drop: ["ALL"]}
+                readOnlyRootFilesystem: true
+              {{- if .Values.databaseCaConfigMap }}
+              volumeMounts:
+                - {name: database-ca, mountPath: /etc/ledgercore/tls, readOnly: true}
+              {{- end }}
+              command: [{{ if .Values.otlpEndpoint }}"opentelemetry-instrument", {{ end }}"python", "-m", "ledger.worker", "reconcile"]
+              envFrom:
+                - secretRef:
+                    name: {{ .Values.existingSecret }}
+              {{- if .Values.otlpEndpoint }}
+              env:
+                - {name: OTEL_EXPORTER_OTLP_ENDPOINT, value: {{ .Values.otlpEndpoint | quote }}}
+                - {name: OTEL_SERVICE_NAME, value: "ledgercore-reconcile"}
+                - {name: OTEL_RESOURCE_ATTRIBUTES, value: "service.instance.id=ledgercore-reconcile"}
+                - {name: OTEL_LOGS_EXPORTER, value: "none"}
+              {{- end }}

@@ -1,0 +1,6 @@
+image: ""
+existingSecret: ledgercore
+migrationSecret: ledgercore-migrations
+replicas: 2
+otlpEndpoint: ""
+databaseCaConfigMap: ""

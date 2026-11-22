@@ -1,0 +1,67 @@
+x-ledger: &ledger
+  build: .
+  image: ledgercore:local
+  environment:
+    DATABASE_URL: postgresql+psycopg://ledger:ledger@db/ledger
+    LEDGER_DEMO: "1"
+    DEMO_JWT_SECRET: local-only-ledgercore-demo-signing-secret
+    DEMO_CLIENT_SECRET: ledger-demo
+    KAFKA_BOOTSTRAP: kafka:9092
+    PAYOUT_URL: http://provider:8000/payout
+
+services:
+  db:
+    image: postgres:17
+    environment:
+      POSTGRES_USER: ledger
+      POSTGRES_PASSWORD: ledger
+      POSTGRES_DB: ledger
+    volumes: [pgdata:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ledger -d ledger"]
+      interval: 2s
+      timeout: 2s
+      retries: 20
+  kafka:
+    image: apache/kafka:4.1.1
+    volumes: [kafkadata:/var/lib/kafka/data]
+    environment:
+      KAFKA_LOG_DIRS: /var/lib/kafka/data
+      KAFKA_NODE_ID: "1"
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: "1"
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: "1"
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: "1"
+  migrate:
+    <<: *ledger
+    command: ["sh", "-c", "alembic upgrade head && python -m ledger.demo"]
+    depends_on:
+      db: {condition: service_healthy}
+  api:
+    <<: *ledger
+    ports: ["127.0.0.1:8000:8000"]
+    depends_on:
+      migrate: {condition: service_completed_successfully}
+  relay:
+    <<: *ledger
+    command: ["python", "-m", "ledger.worker", "relay"]
+    depends_on:
+      migrate: {condition: service_completed_successfully}
+      kafka: {condition: service_started}
+  payout:
+    <<: *ledger
+    command: ["python", "-m", "ledger.worker", "payout"]
+    depends_on:
+      migrate: {condition: service_completed_successfully}
+      provider: {condition: service_started}
+  provider:
+    <<: *ledger
+    command: ["uvicorn", "ledger.demo:provider", "--host", "0.0.0.0"]
+volumes:
+  pgdata:
+  kafkadata:

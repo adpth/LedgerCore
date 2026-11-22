@@ -1,0 +1,48 @@
+name: LedgerCore
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - run: uv sync --locked
+      - run: uv run ruff check ledger migrations tests
+      - run: uv run mypy ledger
+      - run: uv run pytest
+      - run: node --check ledger/static/app.js
+      - run: docker build -t ledgercore:ci .
+  deploy:
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+    needs: verify
+    runs-on: [self-hosted, linux, x64, ledgercore-vpc]
+    environment: production
+    concurrency: ledgercore-production
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+      - uses: aws-actions/amazon-ecr-login@v2
+      - env:
+          ECR: ${{ vars.ECR_REPOSITORY }}
+          CLUSTER: ${{ vars.EKS_CLUSTER }}
+          OTLP: ${{ vars.OTLP_ENDPOINT }}
+        run: |
+          IMAGE="$ECR:$GITHUB_SHA"
+          REPOSITORY="${ECR#*/}"
+          if ! aws ecr describe-images --repository-name "$REPOSITORY" --image-ids imageTag="$GITHUB_SHA" >/dev/null; then
+            docker build -t "$IMAGE" .
+            docker push "$IMAGE"
+          fi
+          aws eks update-kubeconfig --name "$CLUSTER"
+          helm upgrade --install ledgercore deploy/chart --namespace ledgercore \
+            --set-string image="$IMAGE" --set-string otlpEndpoint="$OTLP" \
+            --set-string databaseCaConfigMap=ledgercore-rds-ca --atomic --timeout 10m
