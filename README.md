@@ -11,7 +11,8 @@ Each movement creates a double-entry record whose signed amounts add up to zero.
 
 A $12.50 transfer times out. Watch the service retry, get the original entry back, and trace that same entry in the finance console.
 
-[![Play the LedgerCore walkthrough (2:07)](docs/demo/poster.jpg)](https://adpth.github.io/LedgerCore/demo/)
+[![Play the LedgerCore walkthrough (2:07)](docs/demo/poster.jpg)](
+https://github.com/user-attachments/assets/1d6c6d70-87b1-463a-bbe0-126b89654db5)
 
 ## Run locally
 
