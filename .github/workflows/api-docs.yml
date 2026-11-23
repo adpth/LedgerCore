@@ -1,0 +1,53 @@
+name: API docs
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: github-pages
+
+jobs:
+  publish:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v7
+      - run: uv sync --locked --no-dev
+      - name: Generate Swagger UI and OpenAPI schema
+        run: |
+          uv run --no-sync python - <<'PY'
+          import json
+          from pathlib import Path
+
+          from fastapi.openapi.docs import get_swagger_ui_html
+
+          from ledger.api import app
+
+          site = Path('_site')
+          site.mkdir(exist_ok=True)
+          schema = app.openapi()
+          assert schema['paths'], 'OpenAPI schema has no routes'
+          (site / 'openapi.json').write_text(json.dumps(schema, indent=2), encoding='utf-8')
+          page = get_swagger_ui_html(
+              openapi_url='./openapi.json',
+              title=f'{app.title} API reference',
+              swagger_ui_parameters={'supportedSubmitMethods': []},
+          )
+          (site / 'index.html').write_bytes(page.body)
+          PY
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v4
+        with:
+          path: _site
+      - uses: actions/deploy-pages@v4
+        id: deployment
