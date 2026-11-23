@@ -3,4 +3,12 @@
 __pycache__
 **/__pycache__
 .env
+.env.*
+.aws
+.kube
+**/*.pem
+**/*.key
 infra
+docs
+ledgercore-film*
+goldfish_review_report.md

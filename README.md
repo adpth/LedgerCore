@@ -6,6 +6,15 @@ Each movement creates a double-entry record whose signed amounts add up to zero.
 
 ![LedgerCore finance console showing wallet balances and sample journal entries](docs/images/finance-console.png)
 
+
+## Watch the demo
+
+A $12.50 transfer times out. Watch the service retry, get the original entry back, and trace that same entry in the finance console.
+
+<video src="docs/demo/ledgercore.mp4" poster="docs/demo/poster.jpg" controls playsinline preload="metadata" width="100%" aria-label="LedgerCore walkthrough, 2 minutes and 7 seconds">
+  <a href="docs/demo/ledgercore.mp4"><img src="docs/demo/poster.jpg" alt="Play the LedgerCore walkthrough"></a>
+</video>
+
 ## Run locally
 
 With Docker running, run these commands from the project directory.
@@ -17,7 +26,7 @@ curl --fail --retry 15 --retry-connrefused --retry-delay 1 http://localhost:8000
 
 When the health check returns `{"status":"ready"}`, open [the finance console](http://localhost:8000) and choose **Open demo workspace**. The demo is read-only and comes with sample USD accounts and journal entries if the database has no accounts. If the health check fails, run `docker compose logs migrate api`.
 
-Compose starts PostgreSQL, Kafka, a relay that publishes queued events, and a payout worker with a simulated provider. For API request formats, see the [OpenAPI documentation](http://localhost:8000/docs).
+Compose starts PostgreSQL, Kafka, a relay that publishes queued events, and a payout worker with a simulated provider. For API request formats, see the [OpenAPI documentation](https://adpth.github.io/LedgerCore/).
 
 ### Try a transfer
 
@@ -135,9 +144,23 @@ terraform -chdir=infra apply -var-file=ledgercore.tfvars
 
 Service tokens need an expiration (`exp`), issuer (`iss`), audience (`aud`), and subject (`sub`). The subject must be a string of 1 to 255 characters. Wallet services get permissions through the space-delimited `scope` claim. Finance console sessions can read the ledger. Automated writes require a service bearer token with `ledger:transfer`.
 
-### Finance sign-in
+### Finance sign-in with SSO
 
-Register a confidential OpenID Connect web client with your issuer. Enable Authorization Code, PKCE with S256 and `client_secret_basic`. Register the exact redirect URI `https://<console-host>/console/callback`. Have the issuer include a `roles` array in the RS256 ID token. Give the `finance` role only to users who should have ledger access. Use a console client ID distinct from the ledger API audience. [OpenID Connect Core](https://openid.net/specs/openid-connect-core-1_0.html) · [OAuth 2.0 security guidance](https://www.rfc-editor.org/rfc/rfc9700.html)
+1. Open the finance console and select **Sign in with SSO**.
+2. Sign in with your work account at your organization's identity provider. It redirects you back to LedgerCore.
+3. LedgerCore checks for the `finance` role. With that role, you can check balances, inspect journal entries, and select **Export CSV** to download the journal. If the role is missing, the console denies access.
+
+Use **Sign out** to end your LedgerCore session. Your identity provider manages its own session, so it may still recognize you the next time you sign in. LedgerCore checks your finance role again at each sign-in.
+
+If you're running LedgerCore locally in demo mode, select **Open demo workspace**.
+
+#### Set up your identity provider
+
+1. Register a confidential OpenID Connect web client. Give it a client ID distinct from the ledger API audience.
+2. Enable Authorization Code, PKCE with S256, and `client_secret_basic`. Register `https://<console-host>/console/callback` as the exact redirect URI.
+3. Configure the provider to include a `roles` array in its RS256 ID token. Assign `finance` only to people who should have ledger access.
+
+[OpenID Connect Core](https://openid.net/specs/openid-connect-core-1_0.html) · [OAuth 2.0 security guidance](https://www.rfc-editor.org/rfc/rfc9700.html)
 
 | Console secret setting | Value |
 | --- | --- |
@@ -146,9 +169,9 @@ Register a confidential OpenID Connect web client with your issuer. Enable Autho
 | CONSOLE_OIDC_AUTHORIZE_URL, CONSOLE_OIDC_TOKEN_URL | HTTPS authorization and token endpoints from the configured issuer |
 | CONSOLE_SESSION_SECRET | Random signing secret of at least 32 bytes shared by all API replicas |
 
-Add these values to the `ledgercore` secret and leave `LEDGER_DEMO` unset. The console uses the configured `OAUTH_ISSUER` and `OAUTH_JWKS_URL` for ID token validation. Configure the ingress and any monitoring agents to exclude the callback query string from logs and traces. Keep the session secret private. Rotating it signs out existing console users.
+Add these values to the `ledgercore` secret and leave `LEDGER_DEMO` unset. On the callback, LedgerCore exchanges the authorization code and checks the ID token against `OAUTH_ISSUER`, `OAUTH_JWKS_URL`, and the console client ID. Configure the ingress and any monitoring agents to exclude the callback query string from logs and traces. Keep the session secret private. Rotating it signs out existing console users.
 
-The console keeps you signed in with an HttpOnly cookie. The session lasts up to an hour and ends sooner if the ID token expires. **Sign out** clears the local session. The organization's SSO session remains active according to its own policy. Changes to a finance assignment take effect at the next sign-in or after the current ledger session expires.
+LedgerCore stores the console session in a Secure, HttpOnly cookie. The session lasts up to an hour, or until the ID token expires if that comes sooner.
 
 ## Monitoring and reconciliation
 
