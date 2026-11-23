@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>LedgerCore demo</title>
+  <style>
+    :root { color-scheme: light dark; font-family: system-ui, sans-serif; }
+    body { margin: 0; padding: 2rem 1rem; }
+    main { max-width: 64rem; margin-inline: auto; }
+    nav { display: flex; flex-wrap: wrap; gap: 1rem; }
+    video { display: block; width: 100%; aspect-ratio: 16 / 9; background: #111; }
+  </style>
+</head>
+<body>
+  <main>
+    <nav aria-label="Project links">
+      <a href="https://github.com/adpth/LedgerCore">GitHub repository</a>
+      <a href="../">API reference</a>
+    </nav>
+    <h1>LedgerCore demo</h1>
+    <p>Follow a $12.50 transfer from a timed-out request through a safe retry and into the finance console.</p>
+    <video controls playsinline preload="metadata" poster="poster.jpg" aria-label="LedgerCore walkthrough">
+      <source src="ledgercore.mp4" type="video/mp4">
+      <track kind="captions" src="captions.vtt" srclang="en" label="English">
+    </video>
+    <p><a href="ledgercore.mp4" download>Download the MP4 (2:07)</a></p>
+  </main>
+</body>
+</html>

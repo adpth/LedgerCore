@@ -45,6 +45,10 @@ jobs:
           )
           (site / 'index.html').write_bytes(page.body)
           PY
+      - name: Copy the LedgerCore demo
+        run: |
+          mkdir -p _site/demo
+          cp docs/demo/index.html docs/demo/poster.jpg docs/demo/ledgercore.mp4 docs/demo/captions.vtt _site/demo/
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v4
         with:
